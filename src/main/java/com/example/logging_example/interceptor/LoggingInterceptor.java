@@ -1,6 +1,9 @@
 package com.example.logging_example.interceptor;
 
 import com.example.logging_example.wrapper.CustomHttpRequestWrapper;
+import com.example.logging_example.wrapper.CustomHttpResponseWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -60,11 +63,24 @@ public class LoggingInterceptor implements HandlerInterceptor {
     }
 
     @Override
-    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws JsonProcessingException {
+        // Response Logging
+        if (response instanceof CustomHttpResponseWrapper responseWrapper) {
+            byte[] responseData = responseWrapper.getResponseData();
+            if (responseData != null && responseData.length > 0) {
+                String responseBody = new String(responseData);
 
-        // 응답 로깅
-        log.info("Response Status: [{}]", response.getStatus());
+                ObjectMapper mapper = new ObjectMapper();
+                Object json = mapper.readValue(responseBody, Object.class);
+                String prettyBody = mapper.writeValueAsString(json);
 
+                log.info("Response Status: [{}] URL: [{}] Body: [{}]", response.getStatus(), request.getRequestURI(), prettyBody);
+            } else {
+                log.info("Response Status: [{}] URL: [{}] Body: [Empty]", response.getStatus(), request.getRequestURI());
+            }
+        } else {
+            log.info("Response Status: [{}] URL: [{}]", response.getStatus(), request.getRequestURI());
+        }
     }
 
     private Map<String, String> getRequestParams(HttpServletRequest request) {
