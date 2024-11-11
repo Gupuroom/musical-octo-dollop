@@ -17,6 +17,7 @@ import org.springframework.web.servlet.HandlerMapping;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -24,10 +25,16 @@ public class LoggingInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
+        String requestId = UUID.randomUUID().toString();
+        request.setAttribute("X-Request-ID", requestId);
+        response.addHeader("X-Request-ID", requestId);
+
+        long startTime = System.currentTimeMillis();
+        request.setAttribute("startTime", startTime);
 
         // Request Param Logging
         if (request.getParameterNames().hasMoreElements()) {
-            log.info("Request Method: [{}] URL: [{}] Params: [{}]",request.getMethod(), request.getRequestURI(), getRequestParams(request));
+            log.info("Request Method: [{}] id: [{}] URL: [{}] Params: [{}]", request.getMethod(), requestId, request.getRequestURI(), getRequestParams(request));
             return true;  // 요청을 계속 진행
         }
 
@@ -38,7 +45,7 @@ public class LoggingInterceptor implements HandlerInterceptor {
 
             // Request Body가 있을 경우 로깅
             if (!requestBody.isEmpty()) {
-                log.info("Request Method: [{}] URL: [{}] Body: [{}]", request.getMethod(), request.getRequestURI(), requestBody);
+                log.info("Request Method: [{}] id: [{}] URL: [{}] Body: [{}]", request.getMethod(), requestId, request.getRequestURI(), requestBody);
                 return true;  // 요청을 계속 진행
             }
         }
@@ -51,19 +58,23 @@ public class LoggingInterceptor implements HandlerInterceptor {
                 Map<String, String> pathVariables = (Map<String, String>) currentRequest.getAttribute(HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE);
 
                 if (pathVariables != null) {
-                    log.info("Request Method: [{}] URL: [{}] pathVariables: [{}]", request.getMethod(), request.getRequestURI(), pathVariables);
+                    log.info("Request Method: [{}] id: [{}] URL: [{}] pathVariables: [{}]", request.getMethod(), requestId, request.getRequestURI(), pathVariables);
                     return true;  // 요청을 계속 진행
                 }
             }
         }
 
         // 기본 요청
-        log.info("Request Method: [{}] URL: [{}]",request.getMethod(), request.getRequestURI());
+        log.info("Request Method: [{}] id: [{}] URL: [{}]", request.getMethod(), requestId, request.getRequestURI());
         return true;  // 요청을 계속 진행
     }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws JsonProcessingException {
+        String requestId = (String) request.getAttribute("X-Request-ID");
+        long startTime = (Long) request.getAttribute("startTime");
+        long duration = System.currentTimeMillis() - startTime;
+
         // Response Logging
         if (response instanceof CustomHttpResponseWrapper responseWrapper) {
             byte[] responseData = responseWrapper.getResponseData();
@@ -74,12 +85,12 @@ public class LoggingInterceptor implements HandlerInterceptor {
                 Object json = mapper.readValue(responseBody, Object.class);
                 String prettyBody = mapper.writeValueAsString(json);
 
-                log.info("Response Status: [{}] URL: [{}] Body: [{}]", response.getStatus(), request.getRequestURI(), prettyBody);
+                log.info("Response Status: [{}] id: [{}] duration: [{}] URL: [{}] Body: [{}]", response.getStatus(), requestId, duration, request.getRequestURI(), prettyBody);
             } else {
-                log.info("Response Status: [{}] URL: [{}] Body: [Empty]", response.getStatus(), request.getRequestURI());
+                log.info("Response Status: [{}] id: [{}] duration: [{}] URL: [{}] Body: [Empty]", response.getStatus(), requestId, duration, request.getRequestURI());
             }
         } else {
-            log.info("Response Status: [{}] URL: [{}]", response.getStatus(), request.getRequestURI());
+            log.info("Response Status: [{}] id: [{}] duration: [{}] URL: [{}]", response.getStatus(), requestId, duration, request.getRequestURI());
         }
     }
 
